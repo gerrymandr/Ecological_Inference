@@ -5,6 +5,11 @@ library(ei)
 library(eiPack)
 library(eiCompare)
 library(shinycssloaders)
+#
+library(rgdal)
+library(sp)
+library(tools)
+library(dplyr)
 
 shinyServer(function(input, output, session) {
   
@@ -30,7 +35,35 @@ shinyServer(function(input, output, session) {
       return(NULL)}
     read.csv(inFile$datapath, stringsAsFactors=F)
   })
+
+  #
+  # Uploads the shapefiles (4) and deals with the name & path
+  #
   
+  uploadShapefile <- reactive({
+     if (!is.null(input$shapeFile)){
+       shapeDF <- input$shapeFile
+       prevWD <- getwd()
+       uploadDirectory <- dirname(shapeDF$datapath[1])
+       setwd(uploadDirectory)
+       for (i in 1:nrow(shapeDF)){
+         file.rename(shapeDF$datapath[i], shapeDF$name[i])
+       }
+       shapeName <- shapeDF$name[grep(x=shapeDF$name, pattern="*.shp")]
+        shapeNameSimple <- file_path_sans_ext(shapeName)
+              shapePath <- paste(uploadDirectory, shapeName, sep="/")
+       setwd(prevWD)
+      shapeFrame <- readOGR(dsn=uploadDirectory, layer=shapeNameSimple)
+      return(shapeFrame)
+     } else {
+       defaultShapeFrame = c(0)
+         return(defaultShapeFrame)
+     }
+  })
+      
+#  })
+
+    
   output$dependent <- renderUI({
     df <- filedata()
     if (is.null(df)) return(NULL)
@@ -63,14 +96,17 @@ shinyServer(function(input, output, session) {
   output$ui.action <- renderUI({
     if (is.null(input$file1)) return()
     actionButton('action', ' Run', icon('refresh', lib='glyphicon'))
-  })
-  
+    })
+
+
   ## run models
   
   model <- eventReactive(input$action, {
     
     df <- filedata()[,c(input$independent, input$dependent, input$tot.votes)]
     names(df) <- c('x', 'y', 'z')
+    
+    df2 <- df
     
     # homogeneous precincts
     df <- df[order(df$x),]
@@ -153,9 +189,41 @@ shinyServer(function(input, output, session) {
       scale_color_manual('Race', values=c('red', 'gray40'), labels=c(input$independent, 'White')) +
       geom_errorbarh(aes(xmin=(ei.est) - 2*(ei.se), xmax=(ei.est) + 2*(ei.se), height=0.1), size=5, alpha=0.5, height=0.1) +
       theme_bw() + ggtitle('Ecological Inference')
+
+    ###
+    ### Adding in the precinct shapefile and adding the ei data to it, joining on the "Precinct" column
+    ###
     
+
+    precShapeFrame <- uploadShapefile() 
+    if (length(precShapeFrame) > 1){      
+
+      
+      allFileData <- filedata()
+
+      way.out <- ei_est_gen('y', '~ x', 'z',
+                           data = df[,c(1:3),], table_names = table.names, sample=1000, beta_yes = TRUE) # eiCompare
+      
+      secondWay <- way.out[[2]]
+      secondWay$Precinct <- allFileData$Precinct
+      precShapeFrame@data <- left_join(precShapeFrame@data, secondWay, by = c('Precinct' = 'Precinct'))
+      
+      ei_Beta_Choropleth.plot <- spplot(precShapeFrame, z="betab_x_y", main="EI Estimate beta b_x_y")    
+
+       df2$Precinct <- allFileData$Precinct
+       precShapeFrame@data <- left_join(precShapeFrame@data, df2, by = c('Precinct' = 'Precinct'))
+       
+       racialDemographicVariableChoropleth.plot <- spplot(precShapeFrame, z="x", main="Racial Demographic Variable")    
+
+    }
+    else
+    {
+      ei_Beta_Choropleth.plot <- plot.new()    
+      racialDemographicVariableChoropleth.plot <- plot.new()
+    }
     
-    list(gr.plot = gr.plot, ei.table = ei.table.final, ei.plot = ei.plot)      
+    list(gr.plot = gr.plot, ei.table = ei.table.final, ei.plot = ei.plot, 
+      ei_Beta_Choropleth.plot = ei_Beta_Choropleth.plot, racialDemographicVariableChoropleth.plot = racialDemographicVariableChoropleth.plot)      
   })    
   
   observeEvent(input$action, {
@@ -188,6 +256,23 @@ shinyServer(function(input, output, session) {
     }, width=750, height=200)
   })
   
+  #
+  # Added ObserveEvents for the Map tab.
+  #
+  
+  observeEvent(input$action, {
+    output$ei_Beta_Choropleth <- renderPlot({
+      model()$ei_Beta_Choropleth.plot
+    })
+  })
+  
+  observeEvent(input$action, {
+    output$racialDemographicVariableChoropleth <- renderPlot({
+      model()$racialDemographicVariableChoropleth.plot
+    })
+  })
+  
+  ##
   
   output$ei.compare <- renderTable({
     filedata()
