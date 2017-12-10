@@ -31,14 +31,25 @@ dashboardPage(
       # Reads the shapefile in order to be able to do a choropleth
       #
       
-      fileInput("shapeFile",
-                "Upload Shapefiles",
+      fileInput('shapeFile',
+                'Upload Shapefiles',
                 multiple = TRUE,
                 accept=c('.dbf', '.prj', '.shape', '.shx'),
                 width = NULL,
-                buttonLabel = "Browse...",
-                placeholder = "No file selected")
-  ),
+                buttonLabel = 'Browse...',
+                placeholder = 'No file selected'),
+
+      #
+      # These two inputs are to ensure that the join works.
+      #
+
+      conditionalPanel(
+        condition = "output.shapefileUploaded == true",
+        uiOutput('csvPrecinct'),
+        uiOutput('shpPrecinct')
+      )
+
+      ),
   
 
   dashboardBody(
