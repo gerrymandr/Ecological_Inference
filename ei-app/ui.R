@@ -25,8 +25,32 @@ dashboardPage(
         tags$hr(),
       uiOutput('ui.slider'),
         br(),
-      uiOutput('ui.action')
-                  ),
+      uiOutput('ui.action'),
+
+      #
+      # Reads the shapefile in order to be able to do a choropleth
+      #
+      
+      fileInput('shapeFile',
+                'Upload Shapefiles',
+                multiple = TRUE,
+                accept=c('.dbf', '.prj', '.shape', '.shx'),
+                width = NULL,
+                buttonLabel = 'Browse...',
+                placeholder = 'No file selected'),
+
+      #
+      # These two inputs are to ensure that the join works.
+      #
+
+      conditionalPanel(
+        condition = "output.shapefileUploaded == true",
+        uiOutput('csvPrecinct'),
+        uiOutput('shpPrecinct')
+      )
+
+      ),
+  
 
   dashboardBody(
       
@@ -69,7 +93,7 @@ dashboardPage(
                'MGGG @ Tufts/MIT 2017',
                br(),
                #icon('random', lib='glyphicon'),
-               tags$code('GIS-Hackathon 1.0')
+               tags$code('GIS-Hackathon 1.1')
            )  
     ),
     
@@ -78,7 +102,7 @@ dashboardPage(
            tabBox(
              width=NULL, side='right', height='625px',
              selected='Figures',
-             tabPanel('Map', 'Coming soon!', br(), tags$div(tags$ul(tags$li('User uploads shapeFiles and EI analysis is paired with choropleth of precincts by EI estimates!')))),
+             tabPanel('Map', plotOutput('ei_Beta_Choropleth'),plotOutput('racialDemographicVariableChoropleth')),
              tabPanel('Data', tableOutput('ei.compare')),
              tabPanel('Figures', withSpinner(tableOutput('est')), plotOutput('goodman'), plotOutput('ei.bounds'))
                 )
